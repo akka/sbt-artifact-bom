@@ -1,0 +1,4 @@
+# makeBomTargetName and makeBomProjectVersion can be overridden; run makeBom directly
+> makeBom
+$ exists my-bom/custom-app/pom.xml
+> checkBom

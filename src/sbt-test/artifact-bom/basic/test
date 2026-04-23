@@ -1,0 +1,4 @@
+# compile triggers makeBom automatically; verify the BOM file is created with correct content
+> compile
+$ exists artifact-bom/sample-app/pom.xml
+> checkBom
