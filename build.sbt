@@ -14,6 +14,12 @@ ThisBuild / developers := List(
     email = "info@akka.io",
     url = url("https://akka.io")))
 
+ThisBuild / publishTo := Some("Cloudsmith" at "https://maven.cloudsmith.io/lightbend/akka/")
+ThisBuild / credentials ++= (for {
+  user     <- sys.env.get("PUBLISH_USER")
+  password <- sys.env.get("PUBLISH_PASSWORD")
+} yield Credentials("Cloudsmith", "maven.cloudsmith.io", user, password)).toSeq
+
 lazy val root = project
   .in(file("."))
   .enablePlugins(SbtPlugin)
@@ -24,5 +30,8 @@ lazy val root = project
       scalaBinaryVersion.value match {
         case "2.12" => "1.5.8"
       }
-    }
+    },
+    scriptedLaunchOpts := scriptedLaunchOpts.value ++
+      Seq("-Xmx1024M", "-Dplugin.version=" + version.value),
+    scriptedBufferLog := false
   )
