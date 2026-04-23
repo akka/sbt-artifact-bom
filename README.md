@@ -1,5 +1,6 @@
 # sbt-artifact-bom
 
+
 `sbt-artifact-bom` is an sbt plugin designed to generate a Maven Bill of Materials (BOM) in the form of a `pom.xml` file. It captures all direct and indirect dependencies of your project (as resolved by sbt) and flattens them into a single list of dependencies.
 
 ## Features
