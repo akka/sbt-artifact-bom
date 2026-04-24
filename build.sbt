@@ -14,11 +14,11 @@ ThisBuild / developers := List(
     email = "info@akka.io",
     url = url("https://akka.io")))
 
-ThisBuild / publishTo := Some("Cloudsmith" at "https://maven.cloudsmith.io/lightbend/akka/")
+ThisBuild / publishTo := Some("Cloudsmith API" at "https://maven.cloudsmith.io/lightbend/akka/")
 ThisBuild / credentials ++= (for {
   user     <- sys.env.get("PUBLISH_USER")
   password <- sys.env.get("PUBLISH_PASSWORD")
-} yield Credentials("Cloudsmith", "maven.cloudsmith.io", user, password)).toSeq
+} yield Credentials("Cloudsmith API", "maven.cloudsmith.io", user, password)).toSeq
 
 lazy val root = project
   .in(file("."))
