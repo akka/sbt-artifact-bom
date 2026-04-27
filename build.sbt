@@ -1,6 +1,5 @@
 import sbt.Keys.releaseNotesURL
 
-ThisBuild / version := "0.0.1"
 ThisBuild / organization := "io.akka.sbt"
 ThisBuild / homepage := Some(url("https://github.com/akka/sbt-artifact-bom"))
 ThisBuild / description := "sbt plugin to create Maven pom.xml with direct and indirect dependencies"
