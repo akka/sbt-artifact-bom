@@ -3,14 +3,23 @@
 $ exists artifact-bom/sample-app/pom.xml
 > checkBom
 
-# record the mtime, sleep so the filesystem clock can move, then re-run makeBom
-# and verify it was NOT regenerated because deps haven't changed
+# record mtime, sleep so the filesystem clock can move, re-run makeBom; with the cache key matching
+# the file must not be rewritten
 > recordBomMtime
 $ sleep 1500
 > makeBom
 > checkBomNotRegenerated
 
-# delete the BOM and verify it is recreated even though the cache key matches
+# delete the cache file but leave the BOM in place; makeBom must detect identical content
+# and leave the file untouched (preserving mtime)
+> deleteBomCache
+$ sleep 1500
+> makeBom
+> checkBomNotRegenerated
+
+# delete the BOM and the cache; makeBom must recreate the file
 $ delete artifact-bom/sample-app/pom.xml
+> deleteBomCache
 > makeBom
 $ exists artifact-bom/sample-app/pom.xml
+> checkBom

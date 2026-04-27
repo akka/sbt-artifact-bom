@@ -42,7 +42,7 @@ object ArtifactBomPlugin extends AutoPlugin {
         .toSeq
         .sortBy(m => (m.module.organization, m.module.name))
 
-      // Cache key covers everything that influences the generated file, so we only rewrite when it changes
+      // Cache key covers everything that influences the generated file
       val cacheKey =
         (org +: artName +: bomVersion +: outFile.getAbsolutePath +:
           uniqueDeps.map(m => s"${m.module.organization}:${m.module.name}:${m.module.revision}")
@@ -71,10 +71,19 @@ object ArtifactBomPlugin extends AutoPlugin {
           </project>
 
         val printer = new PrettyPrinter(120, 4)
+        val newContent = printer.format(pomXml)
         IO.createDirectory(outputFolder)
-        IO.write(outFile, printer.format(pomXml))
+
+        // Skip the write (preserving mtime) when an existing file already has identical content,
+        // e.g. after the cache was cleared but the BOM itself is still up to date
+        val existingContent = if (outFile.exists()) Some(IO.read(outFile)) else None
+        if (existingContent.contains(newContent)) {
+          log.debug(s"[$artName] Artifact BOM content unchanged at ${outFile.getAbsolutePath}")
+        } else {
+          IO.write(outFile, newContent)
+          log.info(s"[$artName] Created artifact BOM at ${outFile.getAbsolutePath}")
+        }
         IO.write(cacheFile, cacheKey)
-        log.info(s"[$artName] Created artifact BOM at ${outFile.getAbsolutePath}")
       }
     }.triggeredBy(Compile/compile).value
   )

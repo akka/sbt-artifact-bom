@@ -4,7 +4,7 @@ ThisBuild / organization := "com.example"
 val checkBom = taskKey[Unit]("Verifies content of the generated BOM file")
 val recordBomMtime = taskKey[Unit]("Records the BOM file's last modified time for later comparison")
 val checkBomNotRegenerated = taskKey[Unit]("Asserts the BOM file's mtime matches the previously recorded value")
-val checkBomRegenerated = taskKey[Unit]("Asserts the BOM file's mtime is newer than the previously recorded value")
+val deleteBomCache = taskKey[Unit]("Deletes the makeBom cache file under streams")
 
 lazy val root = (project in file("."))
   .enablePlugins(ArtifactBomPlugin)
@@ -33,15 +33,15 @@ lazy val root = (project in file("."))
       val mtimeFile = target.value / "bom-mtime.txt"
       val previous = IO.read(mtimeFile).toLong
       val current = bomFile.lastModified()
-      assert(current == previous, s"BOM was regenerated unexpectedly (previous=$previous, current=$current)")
-      streams.value.log.info("BOM correctly not regenerated")
+      assert(current == previous, s"BOM was rewritten unexpectedly (previous=$previous, current=$current)")
+      streams.value.log.info("BOM correctly not rewritten")
     },
-    checkBomRegenerated := {
-      val bomFile = baseDirectory.value / "artifact-bom" / name.value / "pom.xml"
-      val mtimeFile = target.value / "bom-mtime.txt"
-      val previous = IO.read(mtimeFile).toLong
-      val current = bomFile.lastModified()
-      assert(current > previous, s"BOM should have been regenerated (previous=$previous, current=$current)")
-      streams.value.log.info("BOM correctly regenerated")
+    deleteBomCache := {
+      // Find and delete any makeBom.cachekey file under target/streams
+      val streamsDir = target.value / "streams"
+      val cacheFiles = (streamsDir ** "makeBom.cachekey").get
+      cacheFiles.foreach(IO.delete)
+      streams.value.log.info(s"Deleted ${cacheFiles.size} makeBom cache file(s)")
+      assert(cacheFiles.nonEmpty, s"Expected to find a makeBom.cachekey under $streamsDir")
     }
   )
