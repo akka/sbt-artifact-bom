@@ -28,6 +28,15 @@ object ArtifactBomPlugin extends AutoPlugin {
       val artName = name.value
       val org = organization.value
       val bomVersion = makeBomProjectVersion.value
+      // Sibling projects in the same build get a new version on every release; excluding them
+      // keeps the BOM stable across releases. projectID is un-cross-versioned, so apply the
+      // crossVersion mapping to match the resolved module name (e.g. lib -> lib_2.13).
+      val sbv = scalaBinaryVersion.value
+      val sv = scalaVersion.value
+      val siblingKeys = projectID.all(ScopeFilter(inAnyProject)).value.map { id =>
+        val crossed = CrossVersion(id.crossVersion, sv, sbv).fold(id.name)(_(id.name))
+        (id.organization, crossed)
+      }.toSet
 
       val outputFolder = makeBomTargetDir.value / makeBomTargetName.value / artName
       val outFile = outputFolder / "pom.xml"
@@ -40,9 +49,10 @@ object ArtifactBomPlugin extends AutoPlugin {
         .groupBy(m => (m.module.organization, m.module.name))
         .map(_._2.head) // De-duplicate
         .toSeq
+        .filterNot(m => siblingKeys.contains((m.module.organization, m.module.name)))
         .sortBy(m => (m.module.organization, m.module.name))
 
-      // Cache key covers everything that influences the generated file, so we only rewrite when it changes
+      // Cache key covers everything that influences the generated file
       val cacheKey =
         (org +: artName +: bomVersion +: outFile.getAbsolutePath +:
           uniqueDeps.map(m => s"${m.module.organization}:${m.module.name}:${m.module.revision}")
@@ -71,10 +81,19 @@ object ArtifactBomPlugin extends AutoPlugin {
           </project>
 
         val printer = new PrettyPrinter(120, 4)
+        val newContent = printer.format(pomXml)
         IO.createDirectory(outputFolder)
-        IO.write(outFile, printer.format(pomXml))
+
+        // Skip the write (preserving mtime) when an existing file already has identical content,
+        // e.g. after the cache was cleared but the BOM itself is still up to date
+        val existingContent = if (outFile.exists()) Some(IO.read(outFile)) else None
+        if (existingContent.contains(newContent)) {
+          log.debug(s"[$artName] Artifact BOM content unchanged at ${outFile.getAbsolutePath}")
+        } else {
+          IO.write(outFile, newContent)
+          log.info(s"[$artName] Created artifact BOM at ${outFile.getAbsolutePath}")
+        }
         IO.write(cacheFile, cacheKey)
-        log.info(s"[$artName] Created artifact BOM at ${outFile.getAbsolutePath}")
       }
     }.triggeredBy(Compile/compile).value
   )

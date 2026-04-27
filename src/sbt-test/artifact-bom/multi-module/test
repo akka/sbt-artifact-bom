@@ -1,0 +1,5 @@
+# app depends on sibling lib; the BOM for app must include lib's transitive deps
+# but must NOT list lib itself (whose version churns at every release).
+> app/compile
+$ exists artifact-bom/app/pom.xml
+> app/checkBom
