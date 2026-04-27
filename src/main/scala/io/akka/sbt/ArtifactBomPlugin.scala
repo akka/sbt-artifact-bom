@@ -26,11 +26,13 @@ object ArtifactBomPlugin extends AutoPlugin {
       val report = update.value
       val log = streams.value.log
       val artName = name.value
+      val org = organization.value
+      val bomVersion = makeBomProjectVersion.value
 
       val outputFolder = makeBomTargetDir.value / makeBomTargetName.value / artName
       val outFile = outputFolder / "pom.xml"
 
-      // 1. Capture every resolved module across the 'compile' and 'runtime' configs
+      // Capture every resolved module across the 'compile' and 'runtime' configs
       val allModules = report.configuration(ConfigRef("compile")).toSeq.flatMap(_.modules) ++
         report.configuration(ConfigRef("runtime")).toSeq.flatMap(_.modules)
 
@@ -38,31 +40,42 @@ object ArtifactBomPlugin extends AutoPlugin {
         .groupBy(m => (m.module.organization, m.module.name))
         .map(_._2.head) // De-duplicate
         .toSeq
-        .sortBy(_.module.name)
+        .sortBy(m => (m.module.organization, m.module.name))
 
-      // 2. Construct the XML
-      val pomXml =
-        <project xmlns="http://maven.apache.org/POM/4.0.0">
-          <modelVersion>4.0.0</modelVersion>
-          <groupId>{organization.value}</groupId>
-          <artifactId>{artName}</artifactId>
-          <version>{makeBomProjectVersion.value}</version>
-          <dependencies>
-            {uniqueDeps.map { m =>
-            <dependency>
-              <groupId>{m.module.organization}</groupId>
-              <artifactId>{m.module.name}</artifactId>
-              <version>{m.module.revision}</version>
-            </dependency>
-          }}
-          </dependencies>
-        </project>
+      // Cache key covers everything that influences the generated file, so we only rewrite when it changes
+      val cacheKey =
+        (org +: artName +: bomVersion +: outFile.getAbsolutePath +:
+          uniqueDeps.map(m => s"${m.module.organization}:${m.module.name}:${m.module.revision}")
+        ).mkString("\n")
+      val cacheFile = streams.value.cacheDirectory / "makeBom.cachekey"
+      val previousKey = if (cacheFile.exists()) Some(IO.read(cacheFile)) else None
 
-      // 3. create folders and file
-      val printer = new PrettyPrinter(120, 4)
-      IO.createDirectory(outputFolder)
-      IO.write(outFile, printer.format(pomXml))
-      log.info(s"[$artName] Created artifact BOM at ${outFile.getAbsolutePath}")
+      if (previousKey.contains(cacheKey) && outFile.exists()) {
+        log.debug(s"[$artName] Artifact BOM up to date at ${outFile.getAbsolutePath}")
+      } else {
+        val pomXml =
+          <project xmlns="http://maven.apache.org/POM/4.0.0">
+            <modelVersion>4.0.0</modelVersion>
+            <groupId>{org}</groupId>
+            <artifactId>{artName}</artifactId>
+            <version>{bomVersion}</version>
+            <dependencies>
+              {uniqueDeps.map { m =>
+              <dependency>
+                <groupId>{m.module.organization}</groupId>
+                <artifactId>{m.module.name}</artifactId>
+                <version>{m.module.revision}</version>
+              </dependency>
+            }}
+            </dependencies>
+          </project>
+
+        val printer = new PrettyPrinter(120, 4)
+        IO.createDirectory(outputFolder)
+        IO.write(outFile, printer.format(pomXml))
+        IO.write(cacheFile, cacheKey)
+        log.info(s"[$artName] Created artifact BOM at ${outFile.getAbsolutePath}")
+      }
     }.triggeredBy(Compile/compile).value
   )
 }

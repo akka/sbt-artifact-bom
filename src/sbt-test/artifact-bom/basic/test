@@ -2,3 +2,15 @@
 > compile
 $ exists artifact-bom/sample-app/pom.xml
 > checkBom
+
+# record the mtime, sleep so the filesystem clock can move, then re-run makeBom
+# and verify it was NOT regenerated because deps haven't changed
+> recordBomMtime
+$ sleep 1500
+> makeBom
+> checkBomNotRegenerated
+
+# delete the BOM and verify it is recreated even though the cache key matches
+$ delete artifact-bom/sample-app/pom.xml
+> makeBom
+$ exists artifact-bom/sample-app/pom.xml
