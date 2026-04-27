@@ -28,6 +28,15 @@ object ArtifactBomPlugin extends AutoPlugin {
       val artName = name.value
       val org = organization.value
       val bomVersion = makeBomProjectVersion.value
+      // Sibling projects in the same build get a new version on every release; excluding them
+      // keeps the BOM stable across releases. projectID is un-cross-versioned, so apply the
+      // crossVersion mapping to match the resolved module name (e.g. lib -> lib_2.13).
+      val sbv = scalaBinaryVersion.value
+      val sv = scalaVersion.value
+      val siblingKeys = projectID.all(ScopeFilter(inAnyProject)).value.map { id =>
+        val crossed = CrossVersion(id.crossVersion, sv, sbv).fold(id.name)(_(id.name))
+        (id.organization, crossed)
+      }.toSet
 
       val outputFolder = makeBomTargetDir.value / makeBomTargetName.value / artName
       val outFile = outputFolder / "pom.xml"
@@ -40,6 +49,7 @@ object ArtifactBomPlugin extends AutoPlugin {
         .groupBy(m => (m.module.organization, m.module.name))
         .map(_._2.head) // De-duplicate
         .toSeq
+        .filterNot(m => siblingKeys.contains((m.module.organization, m.module.name)))
         .sortBy(m => (m.module.organization, m.module.name))
 
       // Cache key covers everything that influences the generated file
