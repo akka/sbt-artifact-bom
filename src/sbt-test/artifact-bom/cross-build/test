@@ -1,0 +1,17 @@
+# Default: makeBomScalaVersion pins to head of crossScalaVersions (2.13.16).
+# Cross-compile both versions; the BOM must end up with 2.13 artifacts even though
+# the 3.3.4 pass ran last.
+> + compile
+> checkBomScalaSuffix scala-library
+
+# Switch the pin to 3.3.4, recompile both, and verify the BOM now reflects 3.3.4
+$ delete artifact-bom/cross-app/pom.xml
+> set root / makeBomScalaVersion := Some("3.3.4")
+> + compile
+> checkBomScalaSuffix 3.3.4
+
+# Pinning to a version not in crossScalaVersions means BOM is never generated
+$ delete artifact-bom/cross-app/pom.xml
+> set root / makeBomScalaVersion := Some("2.12.20")
+> + compile
+> checkBomMissing
