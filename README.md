@@ -44,6 +44,7 @@ The plugin provides the following settings:
 | `makeBomTargetDir` | The base directory where the BOM directory is stored. | `(ThisBuild / baseDirectory).value` |
 | `makeBomTargetName` | The name of the directory where BOM files are stored. | `"artifact-bom"` |
 | `makeBomProjectVersion`| The version string used in the generated `pom.xml`. | `"100.0.0"` |
+| `makeBomScalaVersion` | If `Some(v)`, `makeBom` only runs when `scalaVersion` matches `v`. Avoids the BOM contents flipping between Scala versions in a cross-built project. Must be set at project scope (e.g. `myProject / makeBomScalaVersion := ...`); a `ThisBuild` override will be shadowed by the project-level default. | `crossScalaVersions.value.headOption` (i.e. the project's primary Scala version) |
 
 ## How it works
 
