@@ -25,26 +25,30 @@ object ArtifactBomPlugin extends AutoPlugin {
     makeBomScalaVersion := crossScalaVersions.value.headOption,
 
     makeBom := Def.task {
-      val log = streams.value.log
+      val s = streams.value
+      val log = s.log
       val artName = name.value
       val pinnedScala = makeBomScalaVersion.value
       val currentScala = scalaVersion.value
+      val report = update.value
+      val org = organization.value
+      val bomVersion = makeBomProjectVersion.value
+      val sbv = scalaBinaryVersion.value
+      val allProjectIDs = projectID.all(ScopeFilter(inAnyProject)).value
+      val targetDir = makeBomTargetDir.value
+      val targetName = makeBomTargetName.value
       if (pinnedScala.exists(_ != currentScala)) {
         log.debug(s"[$artName] Skipping artifact BOM generation, scalaVersion $currentScala does not match pinned ${pinnedScala.get}")
       } else {
-        val report = update.value
-        val org = organization.value
-        val bomVersion = makeBomProjectVersion.value
         // Sibling projects in the same build get a new version on every release; excluding them
         // keeps the BOM stable across releases. projectID is un-cross-versioned, so apply the
         // crossVersion mapping to match the resolved module name (e.g. lib -> lib_2.13).
-        val sbv = scalaBinaryVersion.value
-        val siblingKeys = projectID.all(ScopeFilter(inAnyProject)).value.map { id =>
+        val siblingKeys = allProjectIDs.map { id =>
           val crossed = CrossVersion(id.crossVersion, currentScala, sbv).fold(id.name)(_(id.name))
           (id.organization, crossed)
         }.toSet
 
-        val outputFolder = makeBomTargetDir.value / makeBomTargetName.value / artName
+        val outputFolder = targetDir / targetName / artName
         val outFile = outputFolder / "pom.xml"
 
         // Capture every resolved module across the 'compile' and 'runtime' configs
@@ -63,7 +67,7 @@ object ArtifactBomPlugin extends AutoPlugin {
           (org +: artName +: bomVersion +: outFile.getAbsolutePath +:
             uniqueDeps.map(m => s"${m.module.organization}:${m.module.name}:${m.module.revision}")
           ).mkString("\n")
-        val cacheFile = streams.value.cacheDirectory / "makeBom.cachekey"
+        val cacheFile = s.cacheDirectory / "makeBom.cachekey"
         val previousKey = if (cacheFile.exists()) Some(IO.read(cacheFile)) else None
 
         if (previousKey.contains(cacheKey) && outFile.exists()) {
