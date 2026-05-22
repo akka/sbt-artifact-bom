@@ -16,6 +16,7 @@ object ArtifactBomPlugin extends AutoPlugin {
     val makeBomScalaVersion = settingKey[Option[String]]("If set, makeBom only runs when scalaVersion matches this value. Useful for cross-built projects to avoid the BOM contents flipping between cross-build passes (defaults to the head of crossScalaVersions, i.e. the project's primary Scala version)")
     val makeBomOnCompile = settingKey[Boolean]("If true (default), makeBom is triggered automatically after compile. Disable for release flows that must keep the working copy clean (e.g. to avoid disturbing dynver)")
     val makeBomIncludeDependencies = settingKey[Boolean]("If true, the generated pom also populates a top-level <dependencies> section (in addition to <dependencyManagement>). For backwards compatibility with consumers that expected the old dependencies-only output (defaults to false)")
+    val makeBomIncludeInternalDependencies = settingKey[Boolean]("If true, internal/sibling modules (other projects in the same sbt build) that this project depends on are included in the BOM. Disabled by default because their versions change on every release, which would churn the committed on-disk BOM file; bomPublishSettings enables it so a published BOM pins internal modules at the release version")
 
     // Settings for a dedicated BOM module: the BOM becomes the module's main published pom, with no
     // jar/sources/docs. Apply via `.settings(bomPublishSettings)` in addition to enabling the plugin.
@@ -28,6 +29,10 @@ object ArtifactBomPlugin extends AutoPlugin {
       Compile / packageDoc / publishArtifact := false,
       Compile / packageSrc / publishArtifact := false,
       publishMavenStyle := true,
+      // A published BOM should pin the internal modules it depends on (e.g. a sibling SPI module),
+      // so consumers importing it get those modules too. Version churn is irrelevant here since the
+      // pom is published per release rather than committed.
+      makeBomIncludeInternalDependencies := true,
       makePom := {
         val content = renderBom(
           update.value,
@@ -37,7 +42,8 @@ object ArtifactBomPlugin extends AutoPlugin {
           version.value,
           scalaVersion.value,
           scalaBinaryVersion.value,
-          makeBomIncludeDependencies.value)
+          makeBomIncludeDependencies.value,
+          makeBomIncludeInternalDependencies.value)
         val pomFile = (makePom / artifactPath).value
         IO.write(pomFile, content)
         streams.value.log.info(s"[${name.value}] Wrote BOM as the module's published pom to ${pomFile.getAbsolutePath}")
@@ -111,8 +117,8 @@ object ArtifactBomPlugin extends AutoPlugin {
   // (organization, cross-versioned name, real project version), with siblings excluded.
   private def renderBom(report: UpdateReport, allIds: Seq[ModuleID], projectId: ModuleID,
                         org: String, version: String, scalaFullVersion: String, scalaBinVersion: String,
-                        includeDependencies: Boolean): String = {
-    val siblings = siblingKeys(allIds, scalaFullVersion, scalaBinVersion)
+                        includeDependencies: Boolean, includeInternal: Boolean): String = {
+    val siblings = if (includeInternal) Set.empty[(String, String)] else siblingKeys(allIds, scalaFullVersion, scalaBinVersion)
     val deps = bomDependencies(report, siblings)
     val artId = crossed(projectId, scalaFullVersion, scalaBinVersion)
     bomPom(org, artId, version, deps, includeDependencies)
@@ -125,6 +131,7 @@ object ArtifactBomPlugin extends AutoPlugin {
     makeBomScalaVersion := crossScalaVersions.value.headOption,
     makeBomOnCompile := true,
     makeBomIncludeDependencies := false,
+    makeBomIncludeInternalDependencies := false,
 
     makeBom := Def.task {
       val s = streams.value
@@ -137,13 +144,14 @@ object ArtifactBomPlugin extends AutoPlugin {
       val bomVersion = makeBomProjectVersion.value
       val sbv = scalaBinaryVersion.value
       val includeDeps = makeBomIncludeDependencies.value
+      val includeInternal = makeBomIncludeInternalDependencies.value
       val allProjectIDs = projectID.all(ScopeFilter(inAnyProject)).value
       val targetDir = makeBomTargetDir.value
       val targetName = makeBomTargetName.value
       if (pinnedScala.exists(_ != currentScala)) {
         log.debug(s"[$artName] Skipping artifact BOM generation, scalaVersion $currentScala does not match pinned ${pinnedScala.get}")
       } else {
-        val siblings = siblingKeys(allProjectIDs, currentScala, sbv)
+        val siblings = if (includeInternal) Set.empty[(String, String)] else siblingKeys(allProjectIDs, currentScala, sbv)
 
         val outputFolder = targetDir / targetName / artName
         val outFile = outputFolder / "pom.xml"
@@ -152,7 +160,7 @@ object ArtifactBomPlugin extends AutoPlugin {
 
         // Cache key covers everything that influences the generated file
         val cacheKey =
-          (org +: artName +: bomVersion +: includeDeps.toString +: outFile.getAbsolutePath +:
+          (org +: artName +: bomVersion +: includeDeps.toString +: includeInternal.toString +: outFile.getAbsolutePath +:
             uniqueDeps.map { case (g, a, v) => s"$g:$a:$v" }
           ).mkString("\n")
         val cacheFile = s.cacheDirectory / "makeBom.cachekey"

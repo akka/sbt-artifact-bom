@@ -73,6 +73,8 @@ lazy val dependencies = (project in file("dependencies"))
 
 This is published with the standard `sbt publish` / `publishLocal`, and consumed via the `import`-scope snippet shown above. The published pom uses the real project `version` (not the on-disk `makeBomProjectVersion` placeholder).
 
+`bomPublishSettings` also enables `makeBomIncludeInternalDependencies`, so internal modules in the same build that the BOM module depends on (e.g. a sibling SPI module) are pinned in the BOM at the release version. They are excluded from the committed on-disk `makeBom` file by default, because their versions change every release and would churn it.
+
 ## Settings
 
 The plugin provides the following settings:
@@ -85,6 +87,7 @@ The plugin provides the following settings:
 | `makeBomScalaVersion` | If `Some(v)`, `makeBom` only runs when `scalaVersion` matches `v`. Avoids the BOM contents flipping between Scala versions in a cross-built project. Must be set at project scope (e.g. `myProject / makeBomScalaVersion := ...`); a `ThisBuild` override will be shadowed by the project-level default. | `crossScalaVersions.value.headOption` (i.e. the project's primary Scala version) |
 | `makeBomOnCompile` | If `false`, suppresses the automatic `makeBom` trigger after `compile`. Useful for release flows (e.g. with `sbt-dynver`) where the BOM file changing in the working copy mid-release would be disruptive. `makeBom` can still be invoked explicitly. | `true` |
 | `makeBomIncludeDependencies` | If `true`, the generated pom also populates a top-level `<dependencies>` section (in addition to `<dependencyManagement>`), for backwards compatibility with consumers that expected the old dependencies-only output. | `false` |
+| `makeBomIncludeInternalDependencies` | If `true`, internal/sibling modules (other projects in the same sbt build) that this project depends on are included in the BOM. `bomPublishSettings` sets this to `true`. | `false` (`true` under `bomPublishSettings`) |
 
 The plugin also provides:
 
@@ -109,7 +112,7 @@ Regular CI builds keep the default (BOM regenerated on compile); the release job
 
 ## How it works
 
-The plugin inspects the `update` report for the `compile` and `runtime` configurations. It collects all unique modules (de-duplicating by organization and name) and formats them into a `<dependencyManagement>` block within a `pom`-packaged `pom.xml`. Sibling modules in the same build are excluded so the BOM stays stable across releases.
+The plugin inspects the `update` report for the `compile` and `runtime` configurations. It collects all unique modules (de-duplicating by organization and name) and formats them into a `<dependencyManagement>` block within a `pom`-packaged `pom.xml`. By default, sibling modules in the same build are excluded so the committed on-disk BOM stays stable across releases; set `makeBomIncludeInternalDependencies := true` (as `bomPublishSettings` does) to pin them too.
 
 ## License
 

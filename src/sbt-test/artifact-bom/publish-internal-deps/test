@@ -1,0 +1,5 @@
+# bomPublishSettings includes internal sibling modules in the published BOM
+> bom/checkBomContent
+
+# and the BOM publishes cleanly as the module's primary pom
+> bom/publishLocal
