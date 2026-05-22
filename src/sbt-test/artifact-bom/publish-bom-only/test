@@ -1,0 +1,5 @@
+# A dedicated BOM-only module publishes the BOM as its main pom, with no jar/sources/docs
+> checkArtifacts
+
+# publishLocal must succeed publishing the pom only
+> publishLocal

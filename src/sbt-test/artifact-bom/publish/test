@@ -1,0 +1,9 @@
+# With makeBomPublish := true the BOM is added as a classified pom, and the jar still ships
+> checkArtifacts
+
+# publishLocal must succeed, publishing both the jar and the BOM
+> publishLocal
+
+# Opt-out: with makeBomPublish disabled, no BOM artifact is attached
+> set root / makeBomPublish := false
+> checkNoBomWhenDisabled
