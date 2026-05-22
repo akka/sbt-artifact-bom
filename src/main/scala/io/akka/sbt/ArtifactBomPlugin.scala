@@ -15,17 +15,15 @@ object ArtifactBomPlugin extends AutoPlugin {
     val makeBomProjectVersion = settingKey[String]("Project version of the BOM written to disk (defaults to fixed string to avoid versioning trouble). Publication always uses the real project version.")
     val makeBomScalaVersion = settingKey[Option[String]]("If set, makeBom only runs when scalaVersion matches this value. Useful for cross-built projects to avoid the BOM contents flipping between cross-build passes (defaults to the head of crossScalaVersions, i.e. the project's primary Scala version)")
     val makeBomOnCompile = settingKey[Boolean]("If true (default), makeBom is triggered automatically after compile. Disable for release flows that must keep the working copy clean (e.g. to avoid disturbing dynver)")
-    val makeBomPublish = settingKey[Boolean]("If true, the BOM is published as an additional classified pom artifact alongside the project's normal artifacts (defaults to false)")
-    val makeBomClassifier = settingKey[String]("Classifier used for the published BOM artifact (defaults to bom)")
-    val makeBomArtifact = taskKey[File]("Generates the BOM pom file used for publication (uses the real project version)")
     val makeBomIncludeDependencies = settingKey[Boolean]("If true, the generated pom also populates a top-level <dependencies> section (in addition to <dependencyManagement>). For backwards compatibility with consumers that expected the old dependencies-only output (defaults to false)")
 
-    // Settings for a dedicated BOM-only module: the BOM becomes the module's main published pom,
-    // with no jar/sources/docs. Apply via `.settings(bomOnlySettings)` in addition to enabling the
-    // plugin. Use this when the module's sole purpose is to publish a BOM (e.g. `acme-dependencies`).
-    // For a module that also ships a jar, set `makeBomPublish := true` instead to attach the BOM as
-    // an extra classified artifact.
-    lazy val bomOnlySettings: Seq[Setting[_]] = Seq(
+    // Settings for a dedicated BOM module: the BOM becomes the module's main published pom, with no
+    // jar/sources/docs. Apply via `.settings(bomPublishSettings)` in addition to enabling the plugin.
+    //
+    // A BOM must be published as the primary pom artifact of its own module: Maven forbids combining
+    // a <classifier> with <scope>import</scope>, so a BOM cannot be attached as a classified artifact
+    // to a jar-producing module. Give the BOM its own module (e.g. `acme-dependencies`) instead.
+    lazy val bomPublishSettings: Seq[Setting[_]] = Seq(
       Compile / packageBin / publishArtifact := false,
       Compile / packageDoc / publishArtifact := false,
       Compile / packageSrc / publishArtifact := false,
@@ -80,11 +78,6 @@ object ArtifactBomPlugin extends AutoPlugin {
       .sortBy(t => (t._1, t._2))
   }
 
-  // The artifact descriptor for the published BOM: the project's main artifact name, emitted as a
-  // classified pom so it sits alongside (not in place of) the normal jar/pom.
-  private def bomArtifact(mainArtifact: Artifact, classifier: String): Artifact =
-    mainArtifact.withType("pom").withExtension("pom").withClassifier(Some(classifier)).withConfigurations(Vector.empty)
-
   // Render a true BOM: a pom-packaged artifact whose dependencyManagement section pins every
   // transitive dependency, so downstream projects can import it. When includeDependencies is set,
   // the same set is also emitted as a top-level <dependencies> section for backwards compatibility.
@@ -131,46 +124,7 @@ object ArtifactBomPlugin extends AutoPlugin {
     makeBomProjectVersion := "100.0.0",
     makeBomScalaVersion := crossScalaVersions.value.headOption,
     makeBomOnCompile := true,
-    makeBomPublish := false,
-    makeBomClassifier := "bom",
     makeBomIncludeDependencies := false,
-
-    // Generate the BOM as a standalone pom file for publication. Coordinates mirror what sbt deploys
-    // (organization, cross-versioned name, real project version). Unlike the on-disk makeBom file,
-    // publication uses the real project version rather than the fixed makeBomProjectVersion placeholder.
-    makeBomArtifact := {
-      val scalaFullVersion = scalaVersion.value
-      val scalaBinVersion = scalaBinaryVersion.value
-      val artId = crossed(projectID.value, scalaFullVersion, scalaBinVersion)
-      val content = renderBom(
-        update.value,
-        projectID.all(ScopeFilter(inAnyProject)).value,
-        projectID.value,
-        organization.value,
-        version.value,
-        scalaFullVersion,
-        scalaBinVersion,
-        makeBomIncludeDependencies.value)
-      val pomFile = crossTarget.value / s"$artId-${version.value}-${makeBomClassifier.value}.pom"
-      IO.write(pomFile, content)
-      streams.value.log.info(s"[${name.value}] Wrote publishable BOM pom to ${pomFile.getAbsolutePath}")
-      pomFile
-    },
-
-    // When opted in, attach the BOM as an extra classified pom artifact. This is additive: the
-    // project's normal jar/sources/docs/pom are still published unchanged.
-    artifacts := {
-      val prev = artifacts.value
-      if (makeBomPublish.value) prev :+ bomArtifact((Compile / packageBin / artifact).value, makeBomClassifier.value)
-      else prev
-    },
-    packagedArtifacts := Def.taskDyn {
-      val prev = packagedArtifacts.value
-      if (makeBomPublish.value) {
-        val art = bomArtifact((Compile / packageBin / artifact).value, makeBomClassifier.value)
-        Def.task(prev.updated(art, makeBomArtifact.value))
-      } else Def.task(prev)
-    }.value,
 
     makeBom := Def.task {
       val s = streams.value

@@ -6,7 +6,7 @@ val checkArtifacts = taskKey[Unit]("Verifies the module publishes a BOM pom and 
 
 lazy val root = (project in file("."))
   .enablePlugins(ArtifactBomPlugin)
-  .settings(bomOnlySettings)
+  .settings(bomPublishSettings)
   .settings(
     name := "example-dependencies",
     crossPaths := false,

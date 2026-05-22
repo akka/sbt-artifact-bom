@@ -56,41 +56,14 @@ The generated BOM is a true Maven BOM — a `pom`-packaged artifact whose `<depe
 </dependencyManagement>
 ```
 
-There are two ways to publish, depending on whether the module also ships a jar.
+A BOM must be published as the **primary pom artifact of its own dedicated module**. Maven forbids combining a `<classifier>` with `<scope>import</scope>`, so a BOM cannot be attached as a classified artifact to a module that also ships a jar — give it its own module instead.
 
-### 1. Attach the BOM to a jar-producing module
-
-For a normal module that publishes a jar, set `makeBomPublish := true`. The BOM is published as an **additional** classified `pom` artifact (`<artifactId>-<version>-bom.pom`); the module's jar, sources, docs, and main pom are published unchanged.
-
-```scala
-lazy val myLib = (project in file("."))
-  .enablePlugins(ArtifactBomPlugin)
-  .settings(
-    makeBomPublish := true // off by default, so enabling the plugin never changes what you publish
-  )
-```
-
-Downstream consumers reference it with the `bom` classifier:
-
-```xml
-<dependency>
-  <groupId>com.example</groupId>
-  <artifactId>my-lib</artifactId>
-  <version>1.2.3</version>
-  <type>pom</type>
-  <classifier>bom</classifier>
-  <scope>import</scope>
-</dependency>
-```
-
-### 2. Dedicated BOM-only module
-
-For a module whose sole purpose is to publish a BOM (e.g. `acme-dependencies`), apply `bomOnlySettings`. The BOM becomes the module's **main** published pom and no jar/sources/docs are produced:
+Create a module whose sole purpose is to publish the BOM (e.g. `acme-dependencies`) and apply `bomPublishSettings`. The BOM becomes the module's main published pom; no jar, sources, or docs are produced:
 
 ```scala
 lazy val dependencies = (project in file("dependencies"))
   .enablePlugins(ArtifactBomPlugin)
-  .settings(bomOnlySettings)
+  .settings(bomPublishSettings)
   .settings(
     name := "acme-dependencies",
     // depend on everything the BOM should pin
@@ -98,7 +71,7 @@ lazy val dependencies = (project in file("dependencies"))
   )
 ```
 
-This is published with the standard `sbt publish` / `publishLocal`, and consumed via the plain `import`-scope snippet shown above (no classifier).
+This is published with the standard `sbt publish` / `publishLocal`, and consumed via the `import`-scope snippet shown above. The published pom uses the real project `version` (not the on-disk `makeBomProjectVersion` placeholder).
 
 ## Settings
 
@@ -111,14 +84,11 @@ The plugin provides the following settings:
 | `makeBomProjectVersion`| The version string used in the generated `pom.xml`. | `"100.0.0"` |
 | `makeBomScalaVersion` | If `Some(v)`, `makeBom` only runs when `scalaVersion` matches `v`. Avoids the BOM contents flipping between Scala versions in a cross-built project. Must be set at project scope (e.g. `myProject / makeBomScalaVersion := ...`); a `ThisBuild` override will be shadowed by the project-level default. | `crossScalaVersions.value.headOption` (i.e. the project's primary Scala version) |
 | `makeBomOnCompile` | If `false`, suppresses the automatic `makeBom` trigger after `compile`. Useful for release flows (e.g. with `sbt-dynver`) where the BOM file changing in the working copy mid-release would be disruptive. `makeBom` can still be invoked explicitly. | `true` |
-| `makeBomPublish` | If `true`, attach the BOM as an additional classified `pom` artifact alongside a jar-producing module's normal artifacts (see Publishing). | `false` |
-| `makeBomClassifier` | Classifier used for the attached BOM artifact when `makeBomPublish := true`. | `"bom"` |
 | `makeBomIncludeDependencies` | If `true`, the generated pom also populates a top-level `<dependencies>` section (in addition to `<dependencyManagement>`), for backwards compatibility with consumers that expected the old dependencies-only output. | `false` |
 
 The plugin also provides:
 
-- `makeBomArtifact` — a task that generates the publishable BOM `pom` file (using the real project `version`).
-- `bomOnlySettings` — a settings sequence for a dedicated BOM-only module (see Publishing).
+- `bomPublishSettings` — a settings sequence that turns the module into a dedicated BOM publisher (see Publishing).
 
 ## Disabling the compile trigger for releases
 
