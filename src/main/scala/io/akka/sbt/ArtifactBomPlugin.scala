@@ -14,15 +14,22 @@ object ArtifactBomPlugin extends AutoPlugin {
     val makeBomTargetName = settingKey[String]("The name of the directory where BOM files are stored (defaults to artifact-bom)")
     val makeBomProjectVersion = settingKey[String]("Project version of the BOM (defaults to fixed string to avoid versioning trouble)")
     val makeBomScalaVersion = settingKey[Option[String]]("If set, makeBom only runs when scalaVersion matches this value. Useful for cross-built projects to avoid the BOM contents flipping between cross-build passes (defaults to the head of crossScalaVersions, i.e. the project's primary Scala version)")
+    val makeBomOnCompile = settingKey[Boolean]("If true (default), makeBom is triggered automatically after compile. Disable for release flows that must keep the working copy clean (e.g. to avoid disturbing dynver)")
   }
 
   import autoImport._
+
+  // Internal task that hangs the triggeredBy(compile) relationship off the setting,
+  // so users can disable the auto-trigger via `makeBomOnCompile := false` while still
+  // being able to invoke `makeBom` explicitly.
+  private val makeBomCompileTrigger = taskKey[Unit]("Internal: conditionally invokes makeBom after compile based on makeBomOnCompile").withRank(KeyRanks.Invisible)
 
   override lazy val projectSettings: Seq[Setting[_]] = Seq(
     makeBomTargetDir := (ThisBuild / baseDirectory).value,
     makeBomTargetName := "artifact-bom",
     makeBomProjectVersion := "100.0.0",
     makeBomScalaVersion := crossScalaVersions.value.headOption,
+    makeBomOnCompile := true,
 
     makeBom := Def.task {
       val s = streams.value
@@ -106,6 +113,11 @@ object ArtifactBomPlugin extends AutoPlugin {
           IO.write(cacheFile, cacheKey)
         }
       }
-    }.triggeredBy(Compile/compile).value
+    }.value,
+
+    makeBomCompileTrigger := Def.taskDyn {
+      if (makeBomOnCompile.value) Def.task { makeBom.value }
+      else Def.task { () }
+    }.triggeredBy(Compile / compile).value
   )
 }

@@ -1,0 +1,7 @@
+# With makeBomOnCompile := false, compile must NOT generate the BOM
+> compile
+> checkNoBom
+
+# Explicit invocation still works
+> makeBom
+> checkBomExists

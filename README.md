@@ -45,6 +45,24 @@ The plugin provides the following settings:
 | `makeBomTargetName` | The name of the directory where BOM files are stored. | `"artifact-bom"` |
 | `makeBomProjectVersion`| The version string used in the generated `pom.xml`. | `"100.0.0"` |
 | `makeBomScalaVersion` | If `Some(v)`, `makeBom` only runs when `scalaVersion` matches `v`. Avoids the BOM contents flipping between Scala versions in a cross-built project. Must be set at project scope (e.g. `myProject / makeBomScalaVersion := ...`); a `ThisBuild` override will be shadowed by the project-level default. | `crossScalaVersions.value.headOption` (i.e. the project's primary Scala version) |
+| `makeBomOnCompile` | If `false`, suppresses the automatic `makeBom` trigger after `compile`. Useful for release flows (e.g. with `sbt-dynver`) where the BOM file changing in the working copy mid-release would be disruptive. `makeBom` can still be invoked explicitly. | `true` |
+
+## Disabling the compile trigger for releases
+
+When releasing with `sbt-dynver`, having the BOM rewritten on `compile` can make the working tree look dirty and cause dynver to append a `+<sha>-<timestamp>` suffix to the version. Wire `makeBomOnCompile` to a system property so a release build can opt out:
+
+```scala
+ThisBuild / makeBomOnCompile := !sys.props.get("release").contains("true")
+```
+
+Then pass `-Drelease=true` from your release workflow, e.g.:
+
+```yaml
+- name: Release
+  run: sbt -Drelease=true "+publishSigned" sonatypeBundleRelease
+```
+
+Regular CI builds keep the default (BOM regenerated on compile); the release job leaves the working copy untouched.
 
 ## How it works
 
