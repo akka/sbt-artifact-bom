@@ -1,0 +1,9 @@
+# By default only the dependencyManagement block has a <dependencies> section
+> compile
+> countDependencies 1
+
+# Enabling makeBomIncludeDependencies adds a second, top-level <dependencies> section
+$ delete artifact-bom/sample-app/pom.xml
+> set root / makeBomIncludeDependencies := true
+> makeBom
+> countDependencies 2
