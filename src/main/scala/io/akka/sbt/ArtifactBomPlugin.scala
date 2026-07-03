@@ -124,14 +124,19 @@ object ArtifactBomPlugin extends AutoPlugin {
     bomPom(org, artId, version, deps, includeDependencies)
   }
 
-  override lazy val projectSettings: Seq[Setting[_]] = Seq(
-    makeBomTargetDir := (ThisBuild / baseDirectory).value,
+  // Static defaults live at Global scope so users can override them at ThisBuild or project scope;
+  // a project-scoped default would shadow any ThisBuild override through sbt's scope delegation.
+  override lazy val globalSettings: Seq[Setting[_]] = Seq(
     makeBomTargetName := "artifact-bom",
     makeBomProjectVersion := "100.0.0",
-    makeBomScalaVersion := crossScalaVersions.value.headOption,
     makeBomOnCompile := true,
     makeBomIncludeDependencies := false,
-    makeBomIncludeInternalDependencies := false,
+    makeBomIncludeInternalDependencies := false
+  )
+
+  override lazy val projectSettings: Seq[Setting[_]] = Seq(
+    makeBomTargetDir := (ThisBuild / baseDirectory).value,
+    makeBomScalaVersion := crossScalaVersions.value.headOption,
 
     makeBom := Def.task {
       val s = streams.value
