@@ -2,7 +2,15 @@
 > compile
 > countDependencies 1
 
-# Enabling makeBomIncludeDependencies adds a second, top-level <dependencies> section
+# The flag can be enabled at ThisBuild scope: the plugin default lives at Global scope,
+# so it must not shadow the ThisBuild override
+$ delete artifact-bom/sample-app/pom.xml
+> set ThisBuild / makeBomIncludeDependencies := true
+> makeBom
+> countDependencies 2
+
+# Enabling makeBomIncludeDependencies at project scope adds the same top-level <dependencies> section
+> session clear-all
 $ delete artifact-bom/sample-app/pom.xml
 > set root / makeBomIncludeDependencies := true
 > makeBom

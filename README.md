@@ -77,7 +77,7 @@ This is published with the standard `sbt publish` / `publishLocal`, and consumed
 
 ## Settings
 
-The plugin provides the following settings:
+The plugin provides the following settings. Defaults are declared at `Global` scope, so a setting can be overridden either per project or once for the whole build via `ThisBuild` (e.g. `ThisBuild / makeBomIncludeDependencies := true`). The exceptions are `makeBomScalaVersion` and `makeBomTargetDir`, whose defaults depend on project-level keys and therefore must be overridden at project scope.
 
 | Setting | Description | Default Value |
 |---------|-------------|---------------|
