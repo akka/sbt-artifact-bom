@@ -1,0 +1,12 @@
+# compile triggers makeBom automatically; the BOM must manage both the unclassified coordinate
+# and the classified one, and must not manage the sources/javadoc artifacts
+> compile
+$ exists artifact-bom/sample-app/pom.xml
+> checkClassifiers
+
+# regenerating from scratch must produce byte-identical output (stable ordering)
+> snapshotBom
+$ delete artifact-bom/sample-app/pom.xml
+> deleteBomCache
+> makeBom
+> checkBomIdentical

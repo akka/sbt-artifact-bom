@@ -69,31 +69,63 @@ object ArtifactBomPlugin extends AutoPlugin {
   private def siblingKeys(ids: Seq[ModuleID], scalaFullVersion: String, scalaBinVersion: String): Set[(String, String)] =
     ids.map(id => (id.organization, crossed(id, scalaFullVersion, scalaBinVersion))).toSet
 
-  // The flattened, de-duplicated, sorted set of dependencies as (group, artifact, version) tuples,
-  // covering everything resolved across the 'compile' and 'runtime' configurations.
-  private def bomDependencies(report: UpdateReport, siblings: Set[(String, String)]): Seq[(String, String, String)] = {
+  // A dependency to manage in the BOM. 'classifiers' holds the classified artifacts resolved for the
+  // module; the unclassified artifact is always managed and is not listed here.
+  private case class BomDependency(group: String, artifact: String, version: String, classifiers: Seq[String])
+
+  // Classifiers of documentation artifacts. A BOM must never manage these.
+  private val DocClassifiers = Set("sources", "javadoc")
+
+  // The flattened, de-duplicated, sorted set of dependencies, covering everything resolved across
+  // the 'compile' and 'runtime' configurations.
+  private def bomDependencies(report: UpdateReport, siblings: Set[(String, String)]): Seq[BomDependency] = {
     val allModules = report.configuration(ConfigRef("compile")).toSeq.flatMap(_.modules) ++
       report.configuration(ConfigRef("runtime")).toSeq.flatMap(_.modules)
 
     allModules
       .groupBy(m => (m.module.organization, m.module.name))
-      .map(_._2.head) // De-duplicate
       .toSeq
-      .filterNot(m => siblings.contains((m.module.organization, m.module.name)))
-      .map(m => (m.module.organization, m.module.name, m.module.revision))
-      .sortBy(t => (t._1, t._2))
+      .filterNot { case (key, _) => siblings.contains(key) }
+      .map { case ((group, artifact), modules) =>
+        // The same module is reported once per configuration. The revision is identical in each
+        // report, but the classifiers are not, so they are collected across all of them.
+        val classifiers = modules
+          .flatMap(_.artifacts.map { case (art, _) => art.classifier })
+          .flatten
+          .filterNot(DocClassifiers)
+          .distinct
+          .sorted
+
+        BomDependency(group, artifact, modules.head.module.revision, classifiers)
+      }
+      .sortBy(dep => (dep.group, dep.artifact))
   }
 
   // Render a true BOM: a pom-packaged artifact whose dependencyManagement section pins every
   // transitive dependency, so downstream projects can import it. When includeDependencies is set,
   // the same set is also emitted as a top-level <dependencies> section for backwards compatibility.
-  private def bomPom(org: String, artId: String, version: String, deps: Seq[(String, String, String)], includeDependencies: Boolean): String = {
-    val dependencyEntries = deps.map { case (g, a, v) =>
-      <dependency>
-        <groupId>{g}</groupId>
-        <artifactId>{a}</artifactId>
-        <version>{v}</version>
-      </dependency>
+  private def bomPom(org: String, artId: String, version: String, deps: Seq[BomDependency], includeDependencies: Boolean): String = {
+    // Maven keys a managed dependency on groupId:artifactId:type:classifier, so an unclassified
+    // entry does not manage a consumer dependency that declares a classifier. Each classifier
+    // therefore needs its own entry.
+    val dependencyEntries = deps.flatMap { dep =>
+      val unclassified =
+        <dependency>
+          <groupId>{dep.group}</groupId>
+          <artifactId>{dep.artifact}</artifactId>
+          <version>{dep.version}</version>
+        </dependency>
+
+      val classified = dep.classifiers.map { classifier =>
+        <dependency>
+          <groupId>{dep.group}</groupId>
+          <artifactId>{dep.artifact}</artifactId>
+          <version>{dep.version}</version>
+          <classifier>{classifier}</classifier>
+        </dependency>
+      }
+
+      unclassified +: classified
     }
     val pomXml =
       <project xmlns="http://maven.apache.org/POM/4.0.0">
@@ -166,7 +198,7 @@ object ArtifactBomPlugin extends AutoPlugin {
         // Cache key covers everything that influences the generated file
         val cacheKey =
           (org +: artName +: bomVersion +: includeDeps.toString +: includeInternal.toString +: outFile.getAbsolutePath +:
-            uniqueDeps.map { case (g, a, v) => s"$g:$a:$v" }
+            uniqueDeps.map(dep => s"${dep.group}:${dep.artifact}:${dep.version}:${dep.classifiers.mkString(",")}")
           ).mkString("\n")
         val cacheFile = s.cacheDirectory / "makeBom.cachekey"
         val previousKey = if (cacheFile.exists()) Some(IO.read(cacheFile)) else None
