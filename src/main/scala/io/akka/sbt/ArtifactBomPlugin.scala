@@ -15,7 +15,7 @@ object ArtifactBomPlugin extends AutoPlugin {
     val makeBomProjectVersion = settingKey[String]("Project version of the BOM written to disk (defaults to fixed string to avoid versioning trouble). Publication always uses the real project version.")
     val makeBomScalaVersion = settingKey[Option[String]]("If set, makeBom only runs when scalaVersion matches this value. Useful for cross-built projects to avoid the BOM contents flipping between cross-build passes (defaults to the head of crossScalaVersions, i.e. the project's primary Scala version)")
     val makeBomOnCompile = settingKey[Boolean]("If true (default), makeBom is triggered automatically after compile. Disable for release flows that must keep the working copy clean (e.g. to avoid disturbing dynver)")
-    val makeBomIncludeDependencies = settingKey[Boolean]("If true, the generated pom also populates a top-level <dependencies> section (in addition to <dependencyManagement>). For backwards compatibility with consumers that expected the old dependencies-only output (defaults to false)")
+    val makeBomIncludeDependencies = settingKey[Boolean]("If true, the generated pom uses a top-level <dependencies> section instead of <dependencyManagement>. For backwards compatibility with consumers that expected the old dependencies-only output (defaults to false)")
     val makeBomIncludeInternalDependencies = settingKey[Boolean]("If true, internal/sibling modules (other projects in the same sbt build) that this project depends on are included in the BOM. Disabled by default because their versions change on every release, which would churn the committed on-disk BOM file; bomPublishSettings enables it so a published BOM pins internal modules at the release version")
 
     // Settings for a dedicated BOM module: the BOM becomes the module's main published pom, with no
@@ -103,7 +103,7 @@ object ArtifactBomPlugin extends AutoPlugin {
 
   // Render a true BOM: a pom-packaged artifact whose dependencyManagement section pins every
   // transitive dependency, so downstream projects can import it. When includeDependencies is set,
-  // the same set is also emitted as a top-level <dependencies> section for backwards compatibility.
+  // the same set is emitted as a top-level <dependencies> section instead for backwards compatibility.
   private def bomPom(org: String, artId: String, version: String, deps: Seq[BomDependency], includeDependencies: Boolean): String = {
     // Maven keys a managed dependency on groupId:artifactId:type:classifier, so an unclassified
     // entry does not manage a consumer dependency that declares a classifier. Each classifier
@@ -134,12 +134,12 @@ object ArtifactBomPlugin extends AutoPlugin {
         <artifactId>{artId}</artifactId>
         <version>{version}</version>
         <packaging>pom</packaging>
-        <dependencyManagement>
-          <dependencies>
-            {dependencyEntries}
-          </dependencies>
-        </dependencyManagement>
-        {if (includeDependencies) <dependencies>{dependencyEntries}</dependencies> else scala.xml.NodeSeq.Empty}
+        {if (includeDependencies)
+          <dependencies>{dependencyEntries}</dependencies>
+        else
+          <dependencyManagement>
+            <dependencies>{dependencyEntries}</dependencies>
+          </dependencyManagement>}
       </project>
 
     new PrettyPrinter(120, 4).format(pomXml)

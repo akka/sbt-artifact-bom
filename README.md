@@ -86,7 +86,7 @@ The plugin provides the following settings. Defaults are declared at `Global` sc
 | `makeBomProjectVersion`| The version string used in the generated `pom.xml`. | `"100.0.0"` |
 | `makeBomScalaVersion` | If `Some(v)`, `makeBom` only runs when `scalaVersion` matches `v`. Avoids the BOM contents flipping between Scala versions in a cross-built project. Must be set at project scope (e.g. `myProject / makeBomScalaVersion := ...`); a `ThisBuild` override will be shadowed by the project-level default. | `crossScalaVersions.value.headOption` (i.e. the project's primary Scala version) |
 | `makeBomOnCompile` | If `false`, suppresses the automatic `makeBom` trigger after `compile`. Useful for release flows (e.g. with `sbt-dynver`) where the BOM file changing in the working copy mid-release would be disruptive. `makeBom` can still be invoked explicitly. | `true` |
-| `makeBomIncludeDependencies` | If `true`, the generated pom also populates a top-level `<dependencies>` section (in addition to `<dependencyManagement>`), for backwards compatibility with consumers that expected the old dependencies-only output. | `false` |
+| `makeBomIncludeDependencies` | If `true`, the generated pom uses a top-level `<dependencies>` section instead of `<dependencyManagement>`, for backwards compatibility with consumers that expected the old dependencies-only output. | `false` |
 | `makeBomIncludeInternalDependencies` | If `true`, internal/sibling modules (other projects in the same sbt build) that this project depends on are included in the BOM. `bomPublishSettings` sets this to `true`. | `false` (`true` under `bomPublishSettings`) |
 
 The plugin also provides:
