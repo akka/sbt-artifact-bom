@@ -1,5 +1,10 @@
 # bomPublishSettings includes internal sibling modules in the published BOM
 > bom/checkBomContent
 
+# Legacy on-disk output can include internal modules while publication remains a true BOM.
+> set ThisBuild / makeBomIncludeDependencies := true
+> bom/checkDiskFormat
+> bom/checkBomContent
+
 # and the BOM publishes cleanly as the module's primary pom
 > bom/publishLocal

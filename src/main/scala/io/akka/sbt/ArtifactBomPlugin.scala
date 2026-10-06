@@ -15,7 +15,7 @@ object ArtifactBomPlugin extends AutoPlugin {
     val makeBomProjectVersion = settingKey[String]("Project version of the BOM written to disk (defaults to fixed string to avoid versioning trouble). Publication always uses the real project version.")
     val makeBomScalaVersion = settingKey[Option[String]]("If set, makeBom only runs when scalaVersion matches this value. Useful for cross-built projects to avoid the BOM contents flipping between cross-build passes (defaults to the head of crossScalaVersions, i.e. the project's primary Scala version)")
     val makeBomOnCompile = settingKey[Boolean]("If true (default), makeBom is triggered automatically after compile. Disable for release flows that must keep the working copy clean (e.g. to avoid disturbing dynver)")
-    val makeBomIncludeDependencies = settingKey[Boolean]("If true, the generated pom uses a top-level <dependencies> section instead of <dependencyManagement>. For backwards compatibility with consumers that expected the old dependencies-only output (defaults to false)")
+    val makeBomIncludeDependencies = settingKey[Boolean]("If true, makeBom uses the legacy dependencies-only on-disk format instead of <dependencyManagement>. Supported for legacy consumers; bomPublishSettings always publishes a true BOM (defaults to false)")
     val makeBomIncludeInternalDependencies = settingKey[Boolean]("If true, internal/sibling modules (other projects in the same sbt build) that this project depends on are included in the BOM. Disabled by default because their versions change on every release, which would churn the committed on-disk BOM file; bomPublishSettings enables it so a published BOM pins internal modules at the release version")
 
     // Settings for a dedicated BOM module: the BOM becomes the module's main published pom, with no
@@ -34,6 +34,7 @@ object ArtifactBomPlugin extends AutoPlugin {
       // pom is published per release rather than committed.
       makeBomIncludeInternalDependencies := true,
       makePom := {
+        // Published BOMs must use dependencyManagement so Maven import scope manages their entries.
         val content = renderBom(
           update.value,
           projectID.all(ScopeFilter(inAnyProject)).value,
@@ -42,7 +43,7 @@ object ArtifactBomPlugin extends AutoPlugin {
           version.value,
           scalaVersion.value,
           scalaBinaryVersion.value,
-          makeBomIncludeDependencies.value,
+          false,
           makeBomIncludeInternalDependencies.value)
         val pomFile = (makePom / artifactPath).value
         IO.write(pomFile, content)
@@ -127,6 +128,13 @@ object ArtifactBomPlugin extends AutoPlugin {
 
       unclassified +: classified
     }
+    val dependencySection =
+      if (includeDependencies)
+        <dependencies>{dependencyEntries}</dependencies>
+      else
+        <dependencyManagement>
+          <dependencies>{dependencyEntries}</dependencies>
+        </dependencyManagement>
     val pomXml =
       <project xmlns="http://maven.apache.org/POM/4.0.0">
         <modelVersion>4.0.0</modelVersion>
@@ -134,12 +142,7 @@ object ArtifactBomPlugin extends AutoPlugin {
         <artifactId>{artId}</artifactId>
         <version>{version}</version>
         <packaging>pom</packaging>
-        {if (includeDependencies)
-          <dependencies>{dependencyEntries}</dependencies>
-        else
-          <dependencyManagement>
-            <dependencies>{dependencyEntries}</dependencies>
-          </dependencyManagement>}
+        {dependencySection}
       </project>
 
     new PrettyPrinter(120, 4).format(pomXml)
