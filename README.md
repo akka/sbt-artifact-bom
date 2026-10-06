@@ -89,6 +89,17 @@ The plugin provides the following settings. Defaults are declared at `Global` sc
 | `makeBomIncludeDependencies` | If `true`, the generated pom uses a top-level `<dependencies>` section instead of `<dependencyManagement>`, for backwards compatibility with consumers that expected the old dependencies-only output. | `false` |
 | `makeBomIncludeInternalDependencies` | If `true`, internal/sibling modules (other projects in the same sbt build) that this project depends on are included in the BOM. `bomPublishSettings` sets this to `true`. | `false` (`true` under `bomPublishSettings`) |
 
+The dependency settings work independently:
+
+| `makeBomIncludeDependencies` | `makeBomIncludeInternalDependencies` | Generated content |
+|------------------------------|--------------------------------------|-------------------|
+| `false` | `false` | `<dependencyManagement>` with external dependencies |
+| `false` | `true` | `<dependencyManagement>` with external and internal dependencies |
+| `true` | `false` | Top-level `<dependencies>` with external dependencies |
+| `true` | `true` | Top-level `<dependencies>` with external and internal dependencies |
+
+Internal modules' external transitive dependencies are included in every case. When internal modules are included, their versions are pinned at their project versions.
+
 The plugin also provides:
 
 - `bomPublishSettings` — a settings sequence that turns the module into a dedicated BOM publisher (see Publishing).
