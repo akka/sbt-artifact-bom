@@ -1,5 +1,19 @@
-# app depends on sibling lib; the BOM for app must include lib's transitive deps
-# but must NOT list lib itself (whose version churns at every release).
+# Internal modules are excluded by default, while their external dependencies remain.
 > app/compile
 $ exists artifact-bom/app/pom.xml
-> app/checkBom
+> app/checkBom false
+
+# The Global default must allow a ThisBuild override.
+> set ThisBuild / makeBomIncludeInternalDependencies := true
+> app/makeBom
+> app/checkBom true
+
+# A project override must take precedence and regenerate the existing file.
+> set app / makeBomIncludeInternalDependencies := false
+> app/makeBom
+> app/checkBom false
+
+# Inclusion also works at project scope without deleting the generated file.
+> set app / makeBomIncludeInternalDependencies := true
+> app/makeBom
+> app/checkBom true

@@ -5,8 +5,8 @@
 ## Features
 
 - **Flattened Dependency Tree**: Automatically includes both direct and transitive dependencies.
-- **True Maven BOM**: Generates a `pom`-packaged artifact with a `<dependencyManagement>` section that downstream projects can import.
-- **Publishable**: Optionally publishes the BOM, either attached to a jar-producing module or as a dedicated BOM-only module.
+- **True Maven BOM**: By default, generates a `pom`-packaged artifact with a `<dependencyManagement>` section that downstream projects can import.
+- **Publishable**: Optionally publishes the BOM as a dedicated BOM-only module.
 - **Configurable**: Allows customization of the output directory, folder name, and BOM project version.
 - **Automatic Execution**: Triggered automatically by the `compile` task.
 
@@ -40,7 +40,7 @@ This on-disk file uses the fixed `makeBomProjectVersion` (`100.0.0` by default) 
 
 ## Publishing the BOM
 
-The generated BOM is a true Maven BOM — a `pom`-packaged artifact whose `<dependencyManagement>` section pins every resolved dependency. Downstream projects import it with `import` scope:
+The published BOM is always a true Maven BOM — a `pom`-packaged artifact whose `<dependencyManagement>` section pins every resolved dependency. Downstream projects import it with `import` scope:
 
 ```xml
 <dependencyManagement>
@@ -86,8 +86,23 @@ The plugin provides the following settings. Defaults are declared at `Global` sc
 | `makeBomProjectVersion`| The version string used in the generated `pom.xml`. | `"100.0.0"` |
 | `makeBomScalaVersion` | If `Some(v)`, `makeBom` only runs when `scalaVersion` matches `v`. Avoids the BOM contents flipping between Scala versions in a cross-built project. Must be set at project scope (e.g. `myProject / makeBomScalaVersion := ...`); a `ThisBuild` override will be shadowed by the project-level default. | `crossScalaVersions.value.headOption` (i.e. the project's primary Scala version) |
 | `makeBomOnCompile` | If `false`, suppresses the automatic `makeBom` trigger after `compile`. Useful for release flows (e.g. with `sbt-dynver`) where the BOM file changing in the working copy mid-release would be disruptive. `makeBom` can still be invoked explicitly. | `true` |
-| `makeBomIncludeDependencies` | If `true`, the generated pom also populates a top-level `<dependencies>` section (in addition to `<dependencyManagement>`), for backwards compatibility with consumers that expected the old dependencies-only output. | `false` |
+| `makeBomIncludeDependencies` | If `true`, `makeBom` uses the supported legacy dependencies-only on-disk format, with top-level `<dependencies>` instead of `<dependencyManagement>`. `bomPublishSettings` always publishes a true BOM. | `false` |
 | `makeBomIncludeInternalDependencies` | If `true`, internal/sibling modules (other projects in the same sbt build) that this project depends on are included in the BOM. `bomPublishSettings` sets this to `true`. | `false` (`true` under `bomPublishSettings`) |
+
+The dependency settings work independently for the on-disk `makeBom` output:
+
+| `makeBomIncludeDependencies` | `makeBomIncludeInternalDependencies` | Generated content |
+|------------------------------|--------------------------------------|-------------------|
+| `false` | `false` | `<dependencyManagement>` with external dependencies |
+| `false` | `true` | `<dependencyManagement>` with external and internal dependencies |
+| `true` | `false` | Top-level `<dependencies>` with external dependencies |
+| `true` | `true` | Top-level `<dependencies>` with external and internal dependencies |
+
+`bomPublishSettings` always publishes `<dependencyManagement>`, regardless of `makeBomIncludeDependencies`.
+
+Internal modules' external transitive dependencies are included in every case. When internal modules are included, their versions are pinned at their project versions.
+
+**Upgrade note:** In v0.1.0–v0.3.0, `makeBomIncludeDependencies := true` emitted both sections. It now emits only top-level `<dependencies>` in the on-disk file. Set it to `false` if you import that file as a Maven BOM. Published POMs under `bomPublishSettings` always retain `<dependencyManagement>`. The legacy on-disk format remains supported, with no planned removal.
 
 The plugin also provides:
 
@@ -112,7 +127,7 @@ Regular CI builds keep the default (BOM regenerated on compile); the release job
 
 ## How it works
 
-The plugin inspects the `update` report for the `compile` and `runtime` configurations. It collects all unique modules (de-duplicating by organization and name) and formats them into a `<dependencyManagement>` block within a `pom`-packaged `pom.xml`. By default, sibling modules in the same build are excluded so the committed on-disk BOM stays stable across releases; set `makeBomIncludeInternalDependencies := true` (as `bomPublishSettings` does) to pin them too.
+The plugin inspects the `update` report for the `compile` and `runtime` configurations. It collects all unique modules (de-duplicating by organization and name) and formats them into a `<dependencyManagement>` block within a `pom`-packaged `pom.xml`, unless `makeBomIncludeDependencies := true` selects top-level `<dependencies>` for the on-disk file. By default, sibling modules in the same build are excluded so the committed on-disk BOM stays stable across releases; set `makeBomIncludeInternalDependencies := true` (as `bomPublishSettings` does) to pin them too.
 
 ## License
 

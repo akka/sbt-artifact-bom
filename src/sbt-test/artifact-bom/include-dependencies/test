@@ -1,17 +1,22 @@
 # By default only the dependencyManagement block has a <dependencies> section
 > compile
-> countDependencies 1
+> checkBomFormat
 
 # The flag can be enabled at ThisBuild scope: the plugin default lives at Global scope,
 # so it must not shadow the ThisBuild override
 $ delete artifact-bom/sample-app/pom.xml
 > set ThisBuild / makeBomIncludeDependencies := true
 > makeBom
-> countDependencies 2
+> checkBomFormat
 
-# Enabling makeBomIncludeDependencies at project scope adds the same top-level <dependencies> section
+# Enabling makeBomIncludeDependencies at project scope replaces dependencyManagement with top-level dependencies
 > session clear-all
 $ delete artifact-bom/sample-app/pom.xml
 > set root / makeBomIncludeDependencies := true
 > makeBom
-> countDependencies 2
+> checkBomFormat
+
+# Switching back restores dependencyManagement in the existing generated file
+> set root / makeBomIncludeDependencies := false
+> makeBom
+> checkBomFormat
